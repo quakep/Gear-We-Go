@@ -1,0 +1,15 @@
+[
+  {
+    "id": "rev-round-6mm-6ft",
+    "sku": "REV-41-1164",
+    "name": "Polyurethane Round Belt - 6mm - 6ft",
+
+    "category": "belt",
+    "type": "round",
+
+    "material": "polyurethane",
+
+    "diameterMm": 6,
+    "lengthMm": 1828
+  }
+]

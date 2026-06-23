@@ -1,0 +1,14 @@
+{
+  "id": "rev-35-master-link",
+  "sku": "REV-21-3745",
+  "name": "#35 Chain Master Link",
+
+  "category": "chain_component",
+  "type": "35_master_link",
+
+  "chainType": "35",
+  "pitchMm": 9.525,
+
+  "function": "connect_or_repair_chain",
+  "material": "steel"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "rev-chain-25",
+  "sku": "REV-41-1365",
+
+  "category": "chain",
+  "type": "25",
+
+  "pitchMm": 6.35,
+
+  "links": {
+    "min": 10,
+    "max": 500
+  }
+}
