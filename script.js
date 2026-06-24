@@ -1,4 +1,3 @@
-// Paste your custom array database here
 const productDatabase = [
   { "id": "rev-gt2-55", "sku": "REV-41-1797", "name": "GT2 3mm Pitch Belt - 55 Tooth", "category": "belt", "type": "gt2", "pitchMm": 3, "teeth": 55, "lengthMm": 165 },
   { "id": "rev-gt2-85", "sku": "REV-41-1798", "name": "GT2 3mm Pitch Belt - 85 Tooth", "category": "belt", "type": "gt2", "pitchMm": 3, "teeth": 85, "lengthMm": 255 },
@@ -37,117 +36,141 @@ const productDatabase = [
   { "id": "rev-chain-35", "sku": "REV-21-3745", "name": "#35 Heavy Chain", "category": "chain", "type": "35", "pitchMm": 9.525 }
 ];
 
+function calculateCenterDistance(N_p, N_b, N_s, P) {
+    const totalTeeth = N_b;
+    const sumTeeth = N_p + N_s;
+    const diffTeeth = Math.abs(N_p - N_s);
+
+    const b = 2 * totalTeeth - Math.PI * sumTeeth;
+    const discriminant = b * b - 32 * diffTeeth * diffTeeth;
+
+    if (discriminant < 0) return null;
+
+    const centerInPitches = (b + Math.sqrt(discriminant)) / 8;
+    return centerInPitches * P;
+}
+
+function calculateEstimatedTeeth(N_p, N_s, C, P) {
+    const sumTeeth = N_p + N_s;
+    const diffTeeth = Math.abs(N_p - N_s);
+    const centerInPitches = C / P;
+
+    return 2 * centerInPitches + (sumTeeth / 2) + ((diffTeeth * diffTeeth) / (4 * Math.PI * Math.PI * centerInPitches));
+}
+
 function recommendSize() {
-    const componentId = document.getElementById('type-select').value;
-    const selectedItem = productDatabase.find(item => item.id === componentId);
-    
-    const N1 = parseInt(document.getElementById('teeth1').value);
-    const N2 = parseInt(document.getElementById('teeth2').value);
-    const targetC = parseFloat(document.getElementById('desired-center').value);
+    const typeSelect = document.getElementById("type-select").value;
+    const teeth1 = parseInt(document.getElementById("teeth1").value) || 0;
+    const teeth2 = parseInt(document.getElementById("teeth2").value) || 0;
+    const desiredCenter = parseFloat(document.getElementById("desired-center").value) || 0;
 
-    if (!selectedItem || isNaN(N1) || isNaN(N2) || isNaN(targetC)) return;
+    if (teeth1 <= 0 || teeth2 <= 0 || desiredCenter <= 0) {
+        alert("Please enter valid positive numbers for teeth and center distance.");
+        return;
+    }
 
-    const pitch = selectedItem.pitchMm;
+    let pitch = 3;
+    let isChain = false;
+    let chainName = "";
 
-    // --- STRATEGY 1: DYNAMIC CHAIN LINK GENERATION ---
-    if (selectedItem.category === "chain" || selectedItem.category === "chain_component") {
-        const exactLinksFloat = (2 * targetC / pitch) + ((N1 + N2) / 2) + (Math.pow(N2 - N1, 2) / (4 * Math.PI * Math.PI * targetC / pitch));
+    if (typeSelect.startsWith("rev-gt2")) {
+        pitch = 3;
+    } else if (typeSelect.startsWith("rev-rt25") || typeSelect === "rev-chain-25") {
+        pitch = 6.35;
+        if (typeSelect === "rev-chain-25") { isChain = true; chainName = "#25 Roller Chain"; }
+    } else if (typeSelect === "rev-round") {
+        pitch = 6.0; 
+    } else if (typeSelect === "rev-chain-35") {
+        pitch = 9.525;
+        isChain = true;
+        chainName = "#35 Heavy Chain";
+    }
+
+    let finalName = "";
+    let finalDetail = "";
+    let finalSku = "N/A";
+    let finalCenter = 0;
+    let finalChassisCenter = 0;
+    let finalTension = "";
+
+    if (isChain) {
+        const exactTeeth = calculateEstimatedTeeth(teeth1, teeth2, desiredCenter, pitch);
+        let idealLinks = Math.round(exactTeeth);
         
-        let recommendedLinks = Math.round(exactLinksFloat);
-        if (recommendedLinks % 2 !== 0) {
-            recommendedLinks += 1; 
+        if (idealLinks % 2 !== 0) {
+            idealLinks = (idealLinks - exactTeeth > 0) ? idealLinks - 1 : idealLinks + 1;
         }
 
-        const perfectChainCenter = calculateTrueCenter(N1, N2, recommendedLinks, pitch);
-        const recommendedChassisCenter = perfectChainCenter - 0.25;
-
-        displayOutput({
-            mode: "chain",
-            name: `${selectedItem.name || 'Custom Chain'} (Cut to length)`,
-            detail: `${recommendedLinks} Links total`,
-            sku: selectedItem.sku || "N/A",
-            theoreticalCenter: perfectChainCenter,
-            chassisCenter: recommendedChassisCenter,
-            error: perfectChainCenter - targetC
-        });
-    } 
-    // --- STRATEGY 2: INVENTORY BELT SELECTION ---
-    else if (selectedItem.category === "belt") {
-        const matchedBelts = productDatabase.filter(item => item.type === selectedItem.type);
+        finalName = chainName;
+        finalDetail = `Cut to exact length: ${idealLinks} links`;
+        finalSku = "Bulk Stock / Custom Cut";
+        finalCenter = calculateCenterDistance(teeth1, idealLinks, teeth2, pitch);
         
-        let bestBelt = null;
-        let closestCenterDist = Infinity;
-        let minimalError = Infinity;
+        finalChassisCenter = finalCenter + 0.12; 
+        
+        const delta = finalCenter - desiredCenter;
+        finalTension = `Chain calculated. Variance from target: ${delta.toFixed(2)} mm. ${delta > 0 ? 'Slightly longer.' : 'Slightly shorter.'}`;
 
-        matchedBelts.forEach(belt => {
-            const trueC = calculateTrueCenter(N1, N2, belt.teeth, pitch);
-            if (trueC > 0) {
-                const error = trueC - targetC;
-                if (Math.abs(error) < minimalError) {
-                    minimalError = Math.abs(error);
-                    closestCenterDist = trueC;
-                    bestBelt = belt;
+    } else {
+        const targetType = typeSelect.startsWith("rev-gt2") ? "gt2" : (typeSelect.startsWith("rev-rt25") ? "rt25" : "round");
+        const filteredBelts = typeof productDatabase !== 'undefined' ? productDatabase.filter(p => p.type === targetType) : [];
+
+        if (filteredBelts.length === 0 && targetType === "round") {
+            const exactTeeth = Math.round(calculateEstimatedTeeth(teeth1, teeth2, desiredCenter, pitch));
+            finalName = "Round Polyurethane 6mm Belt";
+            finalDetail = `Custom Welded Loop: ${exactTeeth} teeth (${(exactTeeth * pitch).toFixed(1)} mm length)`;
+            finalCenter = calculateCenterDistance(teeth1, exactTeeth, teeth2, pitch);
+            finalChassisCenter = finalCenter - 0.2; 
+            finalTension = "Custom Polyurethane belt requires thermal welding. Cut ~2-5% shorter for stretch tension.";
+        } else if (filteredBelts.length === 0) {
+            alert("Product database is missing or empty. Cannot recommend standard belt.");
+            return;
+        } else {
+            let bestBelt = null;
+            let minDelta = Infinity;
+            let bestCenter = 0;
+
+            filteredBelts.forEach(belt => {
+                const center = calculateCenterDistance(teeth1, belt.teeth, teeth2, pitch);
+                if (center !== null) {
+                    const delta = Math.abs(center - desiredCenter);
+                    if (delta < minDelta) {
+                        minDelta = delta;
+                        bestBelt = belt;
+                        bestCenter = center;
+                    }
                 }
-            }
-        });
-
-        if (bestBelt) {
-            displayOutput({
-                mode: "belt",
-                name: bestBelt.name,
-                detail: `${bestBelt.teeth} Teeth`,
-                sku: bestBelt.sku || "N/A",
-                theoreticalCenter: closestCenterDist,
-                chassisCenter: closestCenterDist, 
-                error: closestCenterDist - targetC
             });
+
+            if (!bestBelt) {
+                alert("Could not find a valid physical configuration for the given sprocket sizes and distance.");
+                return;
+            }
+
+            finalName = bestBelt.name;
+            finalDetail = `${bestBelt.teeth} Tooth Closed-Loop Belt`;
+            finalSku = bestBelt.sku;
+            finalCenter = bestCenter;
+            
+            finalChassisCenter = finalCenter + 0.05; 
+
+            const delta = finalCenter - desiredCenter;
+            if (Math.abs(delta) < 1.5) {
+                finalTension = "Excellent Fit. Fits natively on standard center distances.";
+            } else if (delta > 0) {
+                finalTension = `Loose Fit (+${delta.toFixed(2)}mm over target). Requires a tensioner cam/bearing.`;
+            } else {
+                finalTension = `Tight Fit (${delta.toFixed(2)}mm under target). Mechanical adjustment or idler recommended.`;
+            }
         }
     }
-}
 
-// Full mechanical center line resolution
-// Исправленная и точная математическая функция расчета расстояния
-function calculateTrueCenter(N1, N2, totalTeeth, pitch) {
-    // Если звёздочки/шкивы одинаковые, формула упрощается и не ломает код
-    if (N1 === N2) {
-        return ((totalTeeth - N1) * pitch) / 2;
-    }
-    
-    // Если звёздочки разные, включается полное геометрическое уравнение wrap math
-    const b = 2 * totalTeeth - Math.PI * (N1 + N2);
-    const c = Math.pow(N2 - N1, 2) / (Math.PI * Math.PI);
-    const discriminant = b * b - 32 * c;
-    
-    if (discriminant < 0) return 0; // Защита от нереалистичных параметров сборки
-    
-    return ((b + Math.sqrt(discriminant)) / 8) * pitch;
-}
+    document.getElementById("rec-name").innerText = finalName;
+    document.getElementById("rec-detail").innerText = finalDetail;
+    document.getElementById("rec-sku").innerText = finalSku;
+    document.getElementById("rec-center").innerText = finalCenter ? `${finalCenter.toFixed(4)} mm` : "Invalid geometry";
+    document.getElementById("rec-chassis-center").innerText = finalChassisCenter ? `${finalChassisCenter.toFixed(4)} mm` : "N/A";
+    document.getElementById("rec-tension").innerText = finalTension;
 
-
-function displayOutput(res) {
-    document.getElementById('results-panel').style.display = "block";
-    document.getElementById('rec-name').innerText = res.name;
-    document.getElementById('rec-sku').innerText = res.sku;
-    document.getElementById('rec-detail').innerText = res.detail;
-    document.getElementById('rec-center').innerText = `${res.theoreticalCenter.toFixed(3)} mm`;
-    
-    const centerContainer = document.getElementById('chassis-center-container');
-    if (res.mode === "chain") {
-        centerContainer.style.display = "block";
-        document.getElementById('rec-chassis-center').innerText = `${res.chassisCenter.toFixed(3)} mm (Includes -0.25mm Center Drop)`;
-    } else {
-        centerContainer.style.display = "none";
-    }
-
-    const tensionSpan = document.getElementById('rec-tension');
-    if (res.error >= -0.15 && res.error <= 0.15) {
-        tensionSpan.innerText = "🎯 Drop-In Fit (Optimal Fit)";
-        tensionSpan.style.color = "#10b981";
-    } else if (res.error > 0.15) {
-        tensionSpan.innerText = `⚠️ Slack warning (+${res.error.toFixed(2)} mm loose). Add tensioner.`;
-        tensionSpan.style.color = "#f59e0b";
-    } else {
-        tensionSpan.innerText = `❌ Interference warning (${res.error.toFixed(2)} mm too tight). Assembly will bind.`;
-        tensionSpan.style.color = "#ef4444";
-    }
+    document.getElementById("results-panel").style.display = "block";
 }
